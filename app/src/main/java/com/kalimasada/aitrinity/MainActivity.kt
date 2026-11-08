@@ -131,7 +131,7 @@ private fun askTeam(q: String, gemini: String, meta: String, grok: String): Pair
     if (gemini.isNotBlank()) try {
         val synthesisPrompt = "Pertanyaan pengguna:\n$q\n\nJawaban anggota tim:\n$contributions\n\nSatukan poin terbaik menjadi satu jawaban akhir yang akurat, praktis, dan ringkas. Sebutkan jika ada perbedaan pendapat atau ketidakpastian. Jangan mengarang fakta."
         val body = JSONObject()
-            .put("system_instruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", "Anda adalah koordinator tim KALIMASADA. Sintesis jawaban tim secara objektif."))))
+            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", "Anda adalah koordinator tim KALIMASADA. Sintesis jawaban tim secara objektif."))))
             .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", synthesisPrompt)))))
         val raw = postJson("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", gemini, body, "x-goog-api-key", "")
         synthesis = raw.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
