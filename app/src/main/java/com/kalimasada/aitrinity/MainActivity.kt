@@ -115,7 +115,7 @@ private fun askTeam(q: String, gemini: String, groq: String, cohere: String): Pa
     if (cohere.isNotBlank()) try {
         val body = JSONObject().put("model", "command-r-08-2024").put("message", q)
         val raw = postJson("https://api.cohere.com/v2/chat", cohere, body, "Cohere")
-        val text = JSONObject(raw).getJSONArray("message").getJSONArray("content").getJSONObject(0).getString("text")
+        val text = JSONObject(raw).getJSONObject("message").getJSONArray("content").getJSONObject(0).getString("text")
         results.add("Cohere" to text)
     } catch (e: Exception) { errors.add("Cohere: ${e.message}") }
     if (results.isEmpty()) return Pair("Belum ada model yang berhasil menjawab. Periksa API key dan koneksi internet.\n\n" + errors.joinToString("\n"), "Tidak ada model aktif")
