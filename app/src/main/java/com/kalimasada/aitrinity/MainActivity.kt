@@ -25,31 +25,31 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("kalimasada_prefs", MODE_PRIVATE)
         setContent {
             MaterialTheme {
-                var openai by remember { mutableStateOf(prefs.getString("openai", "") ?: "") }
-                var claude by remember { mutableStateOf(prefs.getString("claude", "") ?: "") }
                 var gemini by remember { mutableStateOf(prefs.getString("gemini", "") ?: "") }
+                var meta by remember { mutableStateOf(prefs.getString("meta", "") ?: "") }
+                var grok by remember { mutableStateOf(prefs.getString("grok", "") ?: "") }
                 var prompt by remember { mutableStateOf("") }
-                var answer by remember { mutableStateOf("Selamat datang di KALIMASADA 1.0. Hubungkan API key ChatGPT, Claude, dan Gemini untuk memulai.") }
+                var answer by remember { mutableStateOf("Selamat datang di KALIMASADA 1.0. Hubungkan API key Gemini, Meta AI, dan Grok untuk memulai.") }
                 var busy by remember { mutableStateOf(false) }
                 var status by remember { mutableStateOf("Siap") }
                 var showKeys by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
                     Text("KALIMASADA 1.0", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("Satu tim AI: ChatGPT + Claude + Gemini", style = MaterialTheme.typography.bodyMedium)
+                    Text("Satu tim AI: Gemini + Meta AI + Grok", style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(onClick = { showKeys = !showKeys }) { Text(if (showKeys) "Tutup pengaturan" else "Pengaturan koneksi AI") }
                     if (showKeys) {
                         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                            OutlinedTextField(openai, { openai = it }, label = { Text("OpenAI API key (ChatGPT)") }, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(claude, { claude = it }, label = { Text("Anthropic API key (Claude)") }, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(gemini, { gemini = it }, label = { Text("Google API key (Gemini)") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(gemini, { gemini = it }, label = { Text("Google Gemini API key") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(meta, { meta = it }, label = { Text("Meta Model API key") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(grok, { grok = it }, label = { Text("xAI Grok API key") }, modifier = Modifier.fillMaxWidth())
                             Button(onClick = {
-                                prefs.edit().putString("openai", openai.trim()).putString("claude", claude.trim()).putString("gemini", gemini.trim()).apply()
+                                prefs.edit().putString("gemini", gemini.trim()).putString("meta", meta.trim()).putString("grok", grok.trim()).apply()
                                 status = "Pengaturan tersimpan di perangkat"
                                 showKeys = false
                             }) { Text("Simpan koneksi") }
-                            Text("API key diperlukan dari masing-masing penyedia. Simpan hanya di perangkat Anda dan jangan bagikan.", style = MaterialTheme.typography.bodySmall)
+                            Text("API key resmi diperlukan dari masing-masing penyedia. Key disimpan di perangkat; jangan bagikan atau unggah ke GitHub.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     Spacer(Modifier.height(8.dp))
@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
                             busy = true
                             status = "Menghubungi tim AI..."
                             scope.launch {
-                                val result = withContext(Dispatchers.IO) { askTeam(q, openai, claude, gemini) }
+                                val result = withContext(Dispatchers.IO) { askTeam(q, gemini, meta, grok) }
                                 answer = result.first
                                 status = result.second
                                 busy = false
@@ -79,56 +79,69 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun request(endpoint: String, key: String, body: JSONObject, provider: String): String {
+private fun postJson(endpoint: String, key: String, body: JSONObject, headerName: String = "Authorization", prefix: String = "Bearer "): JSONObject {
     val conn = URL(endpoint).openConnection() as HttpURLConnection
     try {
         conn.requestMethod = "POST"
         conn.connectTimeout = 20000
-        conn.readTimeout = 60000
+        conn.readTimeout = 90000
         conn.doOutput = true
         conn.setRequestProperty("Content-Type", "application/json")
-        when (provider) {
-            "openai" -> conn.setRequestProperty("Authorization", "Bearer $key")
-            "claude" -> {
-                conn.setRequestProperty("x-api-key", key)
-                conn.setRequestProperty("anthropic-version", "2023-06-01")
-            }
-            else -> conn.setRequestProperty("x-goog-api-key", key)
-        }
+        conn.setRequestProperty(headerName, prefix + key)
         conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
         val code = conn.responseCode
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
         val response = stream.bufferedReader().use { it.readText() }
         if (code !in 200..299) throw Exception("HTTP $code: ${response.take(180)}")
-        return response
+        return JSONObject(response)
     } finally {
         conn.disconnect()
     }
 }
 
-private fun askTeam(q: String, openai: String, claude: String, gemini: String): Pair<String, String> {
+private fun chatBody(model: String, prompt: String): JSONObject =
+    JSONObject().put("model", model)
+        .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", prompt)))
+
+private fun askTeam(q: String, gemini: String, meta: String, grok: String): Pair<String, String> {
     val results = mutableListOf<Pair<String, String>>()
     val errors = mutableListOf<String>()
-    if (openai.isNotBlank()) try {
-        val body = JSONObject().put("model", "gpt-4o-mini")
-            .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", q)))
-        val raw = request("https://api.openai.com/v1/chat/completions", openai, body, "openai")
-        results.add("ChatGPT" to JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content"))
-    } catch (e: Exception) { errors.add("ChatGPT: ${e.message}") }
-    if (claude.isNotBlank()) try {
-        val body = JSONObject().put("model", "claude-3-5-haiku-latest").put("max_tokens", 1200)
-            .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", q)))
-        val raw = request("https://api.anthropic.com/v1/messages", claude, body, "claude")
-        results.add("Claude" to JSONObject(raw).getJSONArray("content").getJSONObject(0).getString("text"))
-    } catch (e: Exception) { errors.add("Claude: ${e.message}") }
+
     if (gemini.isNotBlank()) try {
         val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", q)))))
-        val raw = request("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", gemini, body, "gemini")
-        val answer = JSONObject(raw).getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
-        results.add("Gemini" to answer)
+        val raw = postJson("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", gemini, body, "x-goog-api-key", "")
+        val text = raw.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
+        results.add("Gemini" to text)
     } catch (e: Exception) { errors.add("Gemini: ${e.message}") }
-    if (results.isEmpty()) return Pair("Belum ada model yang berhasil menjawab. Buka Pengaturan koneksi AI, masukkan minimal satu API key yang valid, lalu coba lagi.\n\n" + errors.joinToString("\n"), "Tidak ada model aktif")
-    val combined = results.joinToString("\n\n") { "【${it.first}】\n${it.second}" }
-    val status = "${results.size}/3 model berhasil" + if (errors.isNotEmpty()) " • ${errors.size} gagal" else ""
-    return Pair("Hasil dari tim KALIMASADA:\n\n$combined\n\n---\nSetiap model menjawab secara terpisah; belum ada sintesis otomatis antar-model.", status)
+
+    if (meta.isNotBlank()) try {
+        val raw = postJson("https://api.meta.ai/v1/chat/completions", meta, chatBody("muse-spark-1.3", q))
+        results.add("Meta AI" to raw.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content"))
+    } catch (e: Exception) { errors.add("Meta AI: ${e.message}") }
+
+    if (grok.isNotBlank()) try {
+        val raw = postJson("https://api.x.ai/v1/chat/completions", grok, chatBody("grok-4.7", q))
+        results.add("Grok" to raw.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content"))
+    } catch (e: Exception) { errors.add("Grok: ${e.message}") }
+
+    if (results.isEmpty()) return Pair("Belum ada model yang berhasil menjawab. Masukkan minimal satu API key yang valid di Pengaturan koneksi AI.\n\n" + errors.joinToString("\n"), "Tidak ada model aktif")
+
+    val contributions = results.joinToString("\n\n") { "【${it.first}】\n${it.second}" }
+    var synthesis = ""
+    if (gemini.isNotBlank()) try {
+        val synthesisPrompt = "Pertanyaan pengguna:\n$q\n\nJawaban anggota tim:\n$contributions\n\nSatukan poin terbaik menjadi satu jawaban akhir yang akurat, praktis, dan ringkas. Sebutkan jika ada perbedaan pendapat atau ketidakpastian. Jangan mengarang fakta."
+        val body = JSONObject()
+            .put("system_instruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", "Anda adalah koordinator tim KALIMASADA. Sintesis jawaban tim secara objektif."))))
+            .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", synthesisPrompt)))))
+        val raw = postJson("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", gemini, body, "x-goog-api-key", "")
+        synthesis = raw.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
+    } catch (e: Exception) { errors.add("Sintesis Gemini: ${e.message}") }
+
+    val output = if (synthesis.isNotBlank()) {
+        "JAWABAN AKHIR TIM KALIMASADA\n\n$synthesis\n\n---\nRINCIAN JAWABAN MODEL\n\n$contributions"
+    } else {
+        "HASIL TIM KALIMASADA\n\n$contributions\n\nSintesis otomatis belum tersedia. Pastikan API Gemini aktif untuk menyatukan jawaban."
+    }
+    val status = "${results.size}/3 model berhasil" + if (errors.isNotEmpty()) " • ${errors.size} kendala" else ""
+    return Pair(output + if (errors.isNotEmpty()) "\n\nCatatan:\n" + errors.joinToString("\n") else "", status)
 }
