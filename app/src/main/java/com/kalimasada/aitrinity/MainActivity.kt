@@ -109,7 +109,7 @@ private fun askTeam(q: String, gemini: String, meta: String, grok: String): Pair
 
     if (gemini.isNotBlank()) try {
         val body = JSONObject().put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", q)))))
-        val raw = postJson("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", gemini, body, "x-goog-api-key", "")
+        val raw = postJson("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent", gemini, body, "x-goog-api-key", "")
         val text = raw.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
         results.add("Gemini" to text)
     } catch (e: Exception) { errors.add("Gemini: ${e.message}") }
@@ -133,7 +133,7 @@ private fun askTeam(q: String, gemini: String, meta: String, grok: String): Pair
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", "Anda adalah koordinator tim KALIMASADA. Sintesis jawaban tim secara objektif."))))
             .put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", synthesisPrompt)))))
-        val raw = postJson("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", gemini, body, "x-goog-api-key", "")
+        val raw = postJson("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent", gemini, body, "x-goog-api-key", "")
         synthesis = raw.getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
     } catch (e: Exception) { errors.add("Sintesis Gemini: ${e.message}") }
 
